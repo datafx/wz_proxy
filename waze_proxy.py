@@ -33,12 +33,18 @@ def init_driver():
 def refresh_session():
     global driver
     while True:
-        time.sleep(1500)  # Refresh every 25 minutes
+        time.sleep(1500)  # Every 25 minutes
         print("Refreshing Waze session...")
-        with driver_lock:
-            driver.get("https://www.waze.com/live-map")
-            time.sleep(8)
-        print("Session refreshed!")
+        while True:  # Keep retrying until success
+            try:
+                with driver_lock:
+                    driver.get("https://www.waze.com/live-map")
+                    time.sleep(10)
+                print("Session refreshed!")
+                break  # Success, exit retry loop
+            except Exception as e:
+                print(f"Refresh failed ({e}), retrying in 30 seconds...")
+                time.sleep(30)  # Wait 30 seconds before retrying
 
 @app.route("/georss")
 def georss():
