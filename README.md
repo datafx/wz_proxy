@@ -2,7 +2,7 @@
 
 > **⚠️ Disclaimer:** This is a personal workaround for private use. It interacts with Waze's web API in a way that may violate [Waze's Terms of Service](https://www.waze.com/legal/tos). Use at your own risk. This project is not affiliated with or endorsed by Waze or Google.
 
-A workaround for the broken Waze integration in SpectreNav, caused by Waze adding reCAPTCHA cookie requirements to their `live-map` API in 2025/2026. This solution uses a real Chromium browser session to bypass bot detection and serve Waze alert data locally over your home network.
+A workaround for the Waze integration in SpectreNav, caused by Waze adding reCAPTCHA cookie requirements to their `live-map` API in 2026. This solution uses a real Chromium browser session to bypass bot detection and serve Waze alert data locally over your home network.
 
 ---
 
@@ -11,7 +11,7 @@ A workaround for the broken Waze integration in SpectreNav, caused by Waze addin
 1. A Python script opens a **real visible Chromium window** on your desktop machine and navigates to `https://www.waze.com/live-map`
 2. A **Flask web server** runs alongside it, accepting georss requests
 3. When a request comes in, the script makes the Waze API call **from within the real browser session** — bypassing bot detection entirely
-4. SpectreNav calls the Flask server directly over your **local network or WireGuard VPN**
+4. SpectreNav calls the Flask server directly over your **local network or VPN**
 5. The browser session **auto-refreshes every 25 minutes** to keep cookies fresh
 
 ---
@@ -22,7 +22,7 @@ A workaround for the broken Waze integration in SpectreNav, caused by Waze addin
 - **Chromium** installed on that machine
 - **Python 3** installed
 - **chromedriver** matching your Chromium version
-- iPhone and desktop on the same network, or connected via **WireGuard VPN**
+- iPhone and desktop on the same network, or connected via **VPN**
 
 ---
 
@@ -142,93 +142,6 @@ Toggle **Enabled ON** and wait for the first run. You should see alert points ap
 
 ---
 
-## waze_proxy.py
-
-```python
-import time
-import threading
-from flask import Flask, jsonify, request
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-
-app = Flask(__name__)
-driver_lock = threading.Lock()
-driver = None
-
-def create_driver():
-    options = Options()
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-    options.binary_location = "/usr/bin/chromium"
-    service = Service("/usr/bin/chromedriver")
-    d = webdriver.Chrome(service=service, options=options)
-    d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-    })
-    return d
-
-def init_driver():
-    global driver
-    print("Opening Chromium and visiting Waze...")
-    driver = create_driver()
-    driver.get("https://www.waze.com/live-map")
-    time.sleep(8)
-    print("Ready!")
-
-def refresh_session():
-    global driver
-    while True:
-        time.sleep(1500)  # Refresh every 25 minutes
-        print("Refreshing Waze session...")
-        with driver_lock:
-            driver.get("https://www.waze.com/live-map")
-            time.sleep(8)
-        print("Session refreshed!")
-
-@app.route("/georss")
-def georss():
-    params = request.query_string.decode()
-    georss_url = f"https://www.waze.com/live-map/api/georss?{params}"
-
-    try:
-        with driver_lock:
-            result = driver.execute_async_script("""
-                const callback = arguments[arguments.length - 1];
-                fetch(arguments[0], {
-                    headers: {
-                        'Referer': 'https://www.waze.com/live-map',
-                        'Accept': 'application/json, text/plain, */*',
-                        'Origin': 'https://www.waze.com'
-                    }
-                })
-                .then(r => r.text())
-                .then(data => callback(data))
-                .catch(err => callback('ERROR: ' + err));
-            """, georss_url)
-
-        return app.response_class(
-            response=result,
-            status=200,
-            mimetype='application/json'
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok"})
-
-if __name__ == "__main__":
-    init_driver()
-    refresh_thread = threading.Thread(target=refresh_session, daemon=True)
-    refresh_thread.start()
-    app.run(host="0.0.0.0", port=8099)
-```
-
----
-
 ## Auto-Start on Boot (Optional)
 
 To have the proxy start automatically when your machine boots, create a systemd service:
@@ -267,7 +180,7 @@ sudo systemctl start waze-proxy
 ## Troubleshooting
 
 **Port not reachable from phone:**
-- Make sure your phone is on the same WiFi network, or connected via WireGuard VPN
+- Make sure your phone is on the same WiFi network, or connected via VPN
 - Double-check the port number in the SpectreNav URL
 - Test with Safari on iPhone: `http://YOUR_LOCAL_IP:8099/health` should return `{"status": "ok"}`
 
